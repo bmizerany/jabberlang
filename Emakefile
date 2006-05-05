@@ -1,0 +1,9 @@
+{'src/gen_xmpp_client',          [{outdir, "ebin"},{i,"include"}]}.
+{'src/xmpp',                     [{outdir, "ebin"},{i,"include"}]}.
+{'src/xmpp_callbacks.erl',       [{outdir, "ebin"},{i,"include"}]}.
+{'src/xmpp_echo.erl',            [{outdir, "ebin"}]}.
+{'src/xmpp_echo_behaviour.erl',  [{outdir, "ebin"},{i,"include"}]}.
+{'src/xmpp_echo_behaviour2.erl', [{outdir, "ebin"},{i,"include"}]}.
+{'src/xmpp_erlang_example.erl',  [{outdir, "ebin"},{i,"include"}]}.
+{'src/xmpp_iq.erl',              [{outdir, "ebin"}]}.
+%{'error_logger_xmpp_h.erl',     [{outdir, "ebin"}]}.

@@ -1,0 +1,9 @@
+@author Mickaël Rémond <mickael.remond@process-one.net>
+@copyright 2004-2006 Process-one
+@version 0.2
+@title Jabberlang documentation
+
+@doc
+== Introduction ==
+
+Jabberlang is a Jabber/XMPP library for Erlang.

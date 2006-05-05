@@ -1,0 +1,3 @@
+#!/bin/bash
+export EJABBERD_SO_PATH=~/data/bin/ejabberd/src
+erl -pa ~/data/bin/ejabberd/src/ -pa ebin

@@ -37,6 +37,7 @@
 		resource="Jabberlang",
 		host="localhost",
 		port=5222,
+                domain="localhost",
 		priority="0",
 		show="normal",
 		status="",

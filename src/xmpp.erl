@@ -6,7 +6,7 @@
 -behaviour(gen_fsm).
 
 %% XMPP api
--export([start/0, start/1, start/2,
+-export([start/0, start/1, start/2, start/3,
 	 stop/1,
 	 set_login_information/3,
 	 set_login_information/4,
@@ -35,7 +35,7 @@
 	 ]).
 
 %% FSM exports
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1,
 	 handle_event/3,
          handle_sync_event/4,
@@ -53,13 +53,16 @@
 
 %% API
 start() ->
-    start_link(?defaultserver, ?defaultport).
+    start_link(?defaultserver, ?defaultport, ?defaultserver).
 
 start(Server) ->
-    start_link(Server, ?defaultport).
+    start_link(Server, ?defaultport, Server).
 
 start(Server, Port) ->
-    start_link(Server, Port).
+    start_link(Server, Port, Server).
+
+start(Server, Port, Domain) ->
+    start_link(Server, Port, Domain).
 
 %% End gen_fsm XMPP process.
 stop(Pid) ->
@@ -158,12 +161,11 @@ subscribe(Pid, To) ->
     iq(Pid, "set", To, RosterUpdateQuery).
 
 %% FSM callbacks
-start_link(Server, Port) ->
-    gen_fsm:start_link(?MODULE, [Server, Port], []).
+start_link(Server, Port, Domain) ->
+    gen_fsm:start_link(?MODULE, [Server, Port, Domain], []).
 
-init([Server, Port]) ->
-    {ok, unconfigured, #state{host=Server, port=Port}}.
-
+init([Server, Port, Domain]) ->
+    {ok, unconfigured, #state{host=Server, port=Port, domain=Domain}}.
 
 %% Internal function
 open_client_stream(Socket, Host) ->
@@ -261,6 +263,7 @@ unconfigured({connect}, _From, StateData) ->
 ready_to_connect({connect}, From, StateData) ->
     Host = StateData#state.host,
     Port = StateData#state.port,
+    Domain = StateData#state.domain,
     Socket = case gen_tcp:connect(Host, Port, [{packet,0},
 						 binary,
 						 {active, false},
@@ -273,7 +276,7 @@ ready_to_connect({connect}, From, StateData) ->
 				    exit(Reason)
 	     end,
 
-    open_client_stream(Socket, Host),
+    open_client_stream(Socket, Domain),
 
     %% Start receiver
     %% On the fly parsing library

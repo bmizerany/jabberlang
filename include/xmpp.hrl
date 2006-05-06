@@ -28,7 +28,7 @@
 %% Internal state record definition
 %% TODO: Rename the record xmpp
 -record(state, {socket,
-		xml_stream_pid, 
+		xml_stream, 
 		from_pid, %% This is used in gen_fsm sync calls
 		iq_ref_list = [], %% This is used to store tuples of the from {IQIdRef, CallerPid} to synchronously wait for IQ results
 		callback_module = xmpp_callbacks, %% Default callback module

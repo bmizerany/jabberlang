@@ -1,3 +1,7 @@
 #!/bin/bash
-export EJABBERD_SO_PATH=~/data/bin/ejabberd/src
-erl -pa ~/data/bin/ejabberd/src/ -pa ebin
+
+export EJABBERD=/apps/ejabberd-1.1.0/
+export LIBDIR=$EJABBERD/lib
+export LOADPATH="$LIBDIR/ejabberd-1.1.0/ebin $LIBDIR/repos-1.4/ebin"
+export EJABBERD_SO_PATH=$EJABBERD
+erl -pa $LOADPATH -pa ebin

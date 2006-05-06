@@ -236,8 +236,7 @@ handle_info({stop}, _StateName, StateData) ->
     gen_tcp:close(StateData#state.socket),
 
     %% Necessary to close the xml_stream parser:
-    XMLStreamPid = StateData#state.xml_stream_pid,
-    exit(XMLStreamPid, normal),
+    xml_stream:close(StateData#state.xml_stream),
 
     {stop, normal, StateData};
 %% IQ: Store the tuple {IQIDRef, CallerPid} in the StateData
@@ -279,10 +278,10 @@ ready_to_connect({connect}, From, StateData) ->
     %% Start receiver
     %% On the fly parsing library
     ok = erl_ddll:load_driver(ejabberd:get_so_path(), expat_erl),
-    Pid = xml_stream:start(self()),
-    _ReceiverPid = spawn(?MODULE, receiver, [Socket, Pid]),
+    Stream = xml_stream:new(self()),
+    _ReceiverPid = spawn(?MODULE, receiver, [Socket, Stream]),
 
-    {next_state, wait_for_stream, StateData#state{socket = Socket, xml_stream_pid = Pid, from_pid=From}}.
+    {next_state, wait_for_stream, StateData#state{socket = Socket, xml_stream = Stream, from_pid=From}}.
 
 
 wait_for_stream({xmlstreamstart,"stream:stream", _Attributes}, StateData) ->
@@ -569,11 +568,13 @@ get_subelts_attr(Tagname, AttrName, SubElts) ->
 %% et se trouve ainsi débloqué. Prévoir un timeout pour le processus
 %% en attente, (mais assez long).
 
-receiver(Socket, Pid) ->
+receiver(Socket, Stream) ->
     case gen_tcp:recv(Socket, 0) of
 	{ok, Data} -> 
-	    xml_stream:send_text(Pid, binary_to_list(Data)),
-	    receiver(Socket, Pid);
+            %% it's not necessary to convert binary to list
+            %% as the xml_stream seems to be able to accept both
+	    Stream1 = xml_stream:parse(Stream, Data),
+	    receiver(Socket, Stream1);
 	{error, _Reason} -> 
 	    ok %% End receiver TODO: End other process
     end.

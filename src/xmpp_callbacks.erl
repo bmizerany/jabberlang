@@ -11,11 +11,11 @@
 
 %% TODO: Use State in callbacks ?
 
-presence(XMPP, Type, From, Attrs, Elts) ->
+presence(XMPP, Type, _From, Attrs, Elts) ->
     ?INFO_MSG("Presence ~p: ~s (~p) (~p)", [XMPP, Type, Attrs, Elts]).
 
-message(XMPP, Type, From, Subject, Body, Attrs, Elts) ->
+message(XMPP, Type, _From, _Subject, _Body, Attrs, Elts) ->
     ?INFO_MSG("Message ~p: ~s (~p) (~p)", [XMPP, Type, Attrs, Elts]).
 
-iq(XMPP, Type, From, QueryNS, PacketID, Attrs, Elts) ->
+iq(XMPP, Type, _From, _QueryNS, _PacketID, Attrs, Elts) ->
     ?INFO_MSG("IQ ~p: ~s (~p) (~p)", [XMPP, Type, Attrs, Elts]).

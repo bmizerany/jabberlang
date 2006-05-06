@@ -24,10 +24,10 @@ presence(_XMPP, _Type, _From, _Attrs, _Elts) ->
     ok.
 
 %% Echo: Reply to messages with the same message
-message(XMPP, Type, From, Subject, Body, Attrs, _Elts) ->
+message(XMPP, Type, From, Subject, Body, _Attrs, _Elts) ->
     xmpp:message(XMPP, From, Type, Subject, Body).
 
 %% Ignore (but displays) IQ queries
-iq(XMPP, Type, From, QueryNS, PacketID, Attrs, SubElts) ->
+iq(_XMPP, Type, _From, QueryNS, _PacketID, _Attrs, _SubElts) ->
     io:format("IQ ~s ~s~n", [Type, QueryNS]),
     ok.

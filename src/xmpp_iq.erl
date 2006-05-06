@@ -46,7 +46,7 @@ iq(IQ_QueryID, Type, To, Query) ->
 
 %% Specific IQ formatting functions
 version_r(IQ_QueryID, To, ClientName, ClientVersion) ->
-    Os = os(),
+    _Os = os(),
     Content = io_lib:format("<name>~s</name><version>~s</version><os>~s</os>",
 			    [ClientName, ClientVersion, os()]),
     iq_r(IQ_QueryID, To, "jabber:iq:version", Content).

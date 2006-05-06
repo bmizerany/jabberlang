@@ -153,7 +153,7 @@ subscribe(Pid, To) ->
     Pid ! lists:flatten(PresenceSubscribe),
     %% Add the user in the roster:
     {A,B,C} = erlang:now(),
-    Ref=lists:flatten(io_lib:format("~p~p~p", [A,B,C])),
+    _Ref=lists:flatten(io_lib:format("~p~p~p", [A,B,C])),
     RosterUpdateQuery = io_lib:format("<query xmlns='jabber:iq:roster'><item jid='~s'/></query>", [To]),
     iq(Pid, "set", To, RosterUpdateQuery).
 
@@ -169,7 +169,7 @@ init([Server, Port]) ->
 open_client_stream(Socket, Host) ->
     case gen_tcp:send(Socket, xml_stream_client(Host)) of
 	ok -> ok;
-	Other -> ?ERROR_MSG("Cannot open XMPP client stream~n", [])
+	_Other -> ?ERROR_MSG("Cannot open XMPP client stream~n", [])
     end.
 
 %% Get available authentication method for a given user
@@ -230,7 +230,7 @@ handle_info({callback_module, Module}, StateName, StateData) ->
     ?INFO_MSG("Callback module is now ~p", [Module]),
     {next_state, StateName, StateData#state{callback_module=Module}};
 %% Stop the XMPP gen_fsm
-handle_info({stop}, StateName, StateData) ->
+handle_info({stop}, _StateName, StateData) ->
     ?INFO_MSG("Disconnecting from the XMPP server~n", []),
     gen_tcp:send(StateData#state.socket, ?STREAM_TRAILER),
     gen_tcp:close(StateData#state.socket),
@@ -280,19 +280,19 @@ ready_to_connect({connect}, From, StateData) ->
     %% On the fly parsing library
     ok = erl_ddll:load_driver(ejabberd:get_so_path(), expat_erl),
     Pid = xml_stream:start(self()),
-    ReceiverPid = spawn(?MODULE, receiver, [Socket, Pid]),
+    _ReceiverPid = spawn(?MODULE, receiver, [Socket, Pid]),
 
     {next_state, wait_for_stream, StateData#state{socket = Socket, xml_stream_pid = Pid, from_pid=From}}.
 
 
-wait_for_stream({xmlstreamstart,"stream:stream", Attributes}, StateData) ->
+wait_for_stream({xmlstreamstart,"stream:stream", _Attributes}, StateData) ->
     %% The stream is now open
     %% Retrieve supported authentication methods:
     get_authentication_methods(StateData#state.socket, StateData#state.username),
     {next_state, wait_for_authentication_method, StateData};
 %% cannot receive open stream due to an XMPP error:
-wait_for_stream({xmlstreamelement,{xmlelement, "stream:error", Attrs,
-				   [{xmlelement, Reason, ErrorAttrs, []}]}}, StateData) ->
+wait_for_stream({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
+				   [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", [Reason]),
     {stop, xmpp_error_opening_stream, StateData}.
 
@@ -312,7 +312,7 @@ wait_for_stream({xmlstreamelement,{xmlelement, "stream:error", Attrs,
 %                                          {xmlelement,"digest",[],[]},
 %                                          {xmlelement,"resource",[],[]}]}]}}
 %
-wait_for_authentication_method({xmlstreamelement, {xmlelement, "iq", Attrs, Elts}}, StateData) ->
+wait_for_authentication_method({xmlstreamelement, {xmlelement, "iq", _Attrs, Elts}}, StateData) ->
     %% Extracting 
     [{xmlelement, "query", [{"xmlns","jabber:iq:auth"}],SubElts}] = Elts,
 
@@ -332,13 +332,13 @@ wait_for_authentication_method({xmlstreamelement, {xmlelement, "iq", Attrs, Elts
 	    {next_state, wait_for_authentication_result, StateData}
 	end;
 %% Error: Disconnected
-wait_for_authentication_method({xmlstreamelement,{xmlelement, "stream:error", Attrs,
+wait_for_authentication_method({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 						  [{xmlcdata,"Disconnected"}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", ["Disconnected"]),
     {stop, xmpp_error, StateData};
 %% General error case:
-wait_for_authentication_method({xmlstreamelement,{xmlelement, "stream:error", Attrs,
-						  [{xmlelement, Reason, ErrorAttrs, []}]}}, StateData) ->
+wait_for_authentication_method({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
+						  [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", [Reason]),
     {stop, xmpp_error, StateData}.
 
@@ -351,7 +351,7 @@ wait_for_authentication_result({xmlstreamelement,{xmlelement,"iq",[{"type","resu
     gen_fsm:reply(StateData#state.from_pid, ok),
     {next_state, wait_for_element, StateData#state{from_pid=undefined}};
 %% Error: Disconnected
-wait_for_authentication_result({xmlstreamelement,{xmlelement, "stream:error", Attrs,
+wait_for_authentication_result({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 						  [{xmlcdata,"Disconnected"}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", ["Disconnected"]),
     {stop, xmpp_error, StateData};
@@ -371,7 +371,7 @@ wait_for_authentication_result(Other, StateData) ->
 	    {next_state, wait_for_registration_result, StateData}
     end.
 
-wait_for_registration_result({xmlstreamelement,{xmlelement,"iq",Attrs,SubElts}}, StateData) ->
+wait_for_registration_result({xmlstreamelement,{xmlelement,"iq",Attrs,_SubElts}}, StateData) ->
     case lists:keysearch("type", 1, Attrs) of
 	%% Registration successfull:
 	{value, {"type", "result"}} ->
@@ -390,18 +390,18 @@ wait_for_registration_result({xmlstreamelement,{xmlelement,"iq",Attrs,SubElts}},
 	    {stop, registration_failed, StateData#state{from_pid=undefined}}
     end;
 %% Error: Disconnected
-wait_for_registration_result({xmlstreamelement,{xmlelement, "stream:error", Attrs,
+wait_for_registration_result({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 						  [{xmlcdata,"Disconnected"}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", ["Disconnected"]),
     {stop, xmpp_error, StateData};
 %% Error: General case:
-wait_for_registration_result({xmlstreamelement,{xmlelement, "stream:error", Attrs,
-						  [{xmlelement, Reason, ErrorAttrs, []}]}}, StateData) ->
+wait_for_registration_result({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
+						  [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", [Reason]),
     {stop, xmpp_error, StateData}.
 
-wait_for_element({xmlstreamelement,{xmlelement, "stream:error", Attrs,
-				    [{xmlelement, Reason, ErrorAttrs, []}]}}, StateData) ->
+wait_for_element({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
+				    [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", [Reason]),
     {next_state, wait_for_element, StateData};
 %% TODO: End of stream should be handle in all state (as well as stream:error)
@@ -491,32 +491,32 @@ wait_for_element(XML, StateData) ->
 %% 		     [{xmlcdata,
 %% 		       "I would like to add you to my roster."},
 %% 		      {xmlcdata,"\n"}]}]}}
-process_presence(_Pid, Socket, _Module, "subscribe", Attrs, Elts) ->
+process_presence(_Pid, Socket, _Module, "subscribe", Attrs, _Elts) ->
     {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
     PresenceTag = "<presence type='~s' to='~s'/>",
     Allowsubscribtion = io_lib:format(PresenceTag,["subscribed", Who]),
     gen_tcp:send(Socket, Allowsubscribtion),
     Subscribe = io_lib:format(PresenceTag,["subscribe", Who]),
     gen_tcp:send(Socket, Subscribe);
-process_presence(_Pid, Socket, _Module, "subscribed", Attrs, Elts) ->
+process_presence(_Pid, _Socket, _Module, "subscribed", Attrs, _Elts) ->
     {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
     ?INFO_MSG("Now subscribed to ~s", [Who]);
 %% Generic presence: use callbacks
 %% TODO: For available presence: Extract show, status (and priority ?)
-process_presence(Pid, Socket, Module, Type, Attrs, Elts) ->
+process_presence(Pid, _Socket, Module, Type, Attrs, Elts) ->
     {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
     Module:presence(Pid, Type, Who, Attrs, Elts).
 
 %% The client has received a message
 %% Use callback module to "send" it to the client
-process_message(Pid, Socket, Module, Type, Attrs, SubElts) ->
+process_message(Pid, _Socket, Module, Type, Attrs, SubElts) ->
     {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
     Body = get_subelts_cdata("body", SubElts),
     Subject = get_subelts_cdata("subject", SubElts),
     Module:message(Pid, Type, Who, Subject, Body, Attrs, SubElts).
 
 %% The client has received an iq query
-process_iq(Pid, Socket, Module, Type, Attrs, SubElts, StateData) ->
+process_iq(Pid, _Socket, Module, Type, Attrs, SubElts, StateData) ->
     case lists:keysearch("id", 1, Attrs) of
 	{value, {"id", Ref}} ->
 	    {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
@@ -535,7 +535,7 @@ process_iq_result(IQRefList, Ref, Stanza) ->
 	{value, {Ref, Pid}} ->
 	    ?INFO_MSG("Received IQ answer: ~p~n", [Stanza]),
 	    Pid ! {iqresult, Ref, Stanza},
-	    NewIQRefList = lists:keydelete(Ref, 1, IQRefList);
+	    _NewIQRefList = lists:keydelete(Ref, 1, IQRefList);
 	_Other ->
 	    ?ERROR_MSG("IQ result without existing id reference: ~p~n", [Stanza]),
 	    IQRefList
@@ -574,7 +574,7 @@ receiver(Socket, Pid) ->
 	{ok, Data} -> 
 	    xml_stream:send_text(Pid, binary_to_list(Data)),
 	    receiver(Socket, Pid);
-	{error, Reason} -> 
+	{error, _Reason} -> 
 	    ok %% End receiver TODO: End other process
     end.
 
@@ -584,7 +584,7 @@ xml_stream_client(Server) ->
     io_lib:format(?STREAM_CLIENT_HEADER, [Server]).
 
 %% Automatic handler for jabber:iq:version queries
-automatic_iq(Pid, Module, Type, From, "jabber:iq:version", PacketID, Attrs, SubElts, StateData) ->
+automatic_iq(Pid, _Module, _Type, From, "jabber:iq:version", PacketID, _Attrs, _SubElts, StateData) ->
     ClientName    = StateData#state.client_name,
     ClientVersion = StateData#state.client_version,
     %% Format IQ result:
@@ -593,7 +593,7 @@ automatic_iq(Pid, Module, Type, From, "jabber:iq:version", PacketID, Attrs, SubE
     xmpp:send(Pid, XMPP_Packet);
 
 %% No automatic IQ reply: Let the callback module handle the answer.
-automatic_iq(Pid, Module, Type, From, QueryNS, PacketID, Attrs, SubElts, StateData) ->
+automatic_iq(Pid, Module, Type, From, QueryNS, PacketID, Attrs, SubElts, _StateData) ->
     Module:iq(Pid, Type, From, QueryNS, PacketID, Attrs, SubElts).
 
 %% OTP related code
@@ -601,7 +601,7 @@ automatic_iq(Pid, Module, Type, From, QueryNS, PacketID, Attrs, SubElts, StateDa
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
-terminate(Reason, StateName, StateData) ->
+terminate(_Reason, _StateName, _StateData) ->
     ok.
 
 

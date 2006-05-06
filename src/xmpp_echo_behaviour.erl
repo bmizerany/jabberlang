@@ -31,7 +31,7 @@ start() ->
     gen_xmpp_client:start_link(?MODULE, [], []).
 
 %% gen_xmpp_client callbacks
-init(Args, State) ->
+init(_Args, State) ->
     {ok, State}.
 
 %% Ignore presence packets
@@ -39,9 +39,9 @@ presence(_XMPP, _Type, _From, _Attrs, _Elts) ->
     ok.
 
 %% Echo: Reply to messages with the same message
-message(XMPP, Type, From, Subject, Body, Attrs, _Elts) ->
+message(XMPP, Type, From, Subject, Body, _Attrs, _Elts) ->
     xmpp:message(XMPP, From, Type, Subject, Body).
 
 %% Ignore IQ query
-iq(XMPP, Type, From, QueryNS, PacketID, Attrs, SubElts) ->
+iq(_XMPP, _Type, _From, _QueryNS, _PacketID, _Attrs, _SubElts) ->
     ok.

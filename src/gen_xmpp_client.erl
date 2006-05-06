@@ -20,11 +20,11 @@ behaviour_info(callbacks) ->
      {presence, 5},
      {message, 7},
      {iq, 7}];
-behaviour_info(Other) ->
+behaviour_info(_Other) ->
     undefined.
 
 %% Options are gen_fsm options
-start(Module, Args, Options) ->
+start(_Module, _Args, _Options) ->
     ok.
 
 %% Options are gen_fsm options
@@ -33,7 +33,7 @@ start_link(Module, Args, _Options) ->
     xmpp:set_callback_module(XMPP, Module),
     configure_xmmp_client(XMPP, Module, Args),
     State = #state{}, %% TODO: Take state from the XMPP module
-    {ok, NewState} = Module:init(Args, State),
+    {ok, _NewState} = Module:init(Args, State),
     xmpp:connect(XMPP),
     {ok, XMPP}.
 
@@ -57,7 +57,7 @@ configure_xmmp_client(XMPP, Module, Args) ->
 
 %% Set XMPP hostname/port parameters
 %% Do nothing
-set_host(XMPP, undefined, _) ->
+set_host(_XMPP, undefined, _) ->
     ok;
 %% Only set hostname
 set_host(XMPP, Host, undefined) ->

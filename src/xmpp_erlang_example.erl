@@ -36,7 +36,7 @@ initialize_counter_pong(XMPP, Counter) ->
     xmpp:message(XMPP, "mremond@localhost/pong", "chat", "", encode(Counter)).
 
 %% gen_xmpp_client callbacks
-init(Args, State) ->
+init(_Args, State) ->
     {ok, State}.
 
 %% Ignore presence packets
@@ -44,13 +44,13 @@ presence(_XMPP, _Type, _From, _Attrs, _Elts) ->
     ok.
 
 %% Reply to increment
-message(XMPP, Type, From, Subject, Body, Attrs, _Elts) ->
+message(XMPP, Type, From, Subject, Body, _Attrs, _Elts) ->
     Value = decode(Body),
     io:format("Value: ~p~n", [Value]),
     xmpp:message(XMPP, From, Type, Subject, encode(Value+1)).
 
 %% Ignore IQ query
-iq(XMPP, Type, From, QueryNS, PacketID, Attrs, SubElts) ->
+iq(_XMPP, _Type, _From, _QueryNS, _PacketID, _Attrs, _SubElts) ->
     ok.
 
 %% Take term and return encoded string

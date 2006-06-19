@@ -384,6 +384,7 @@ wait_for_registration_result({xmlstreamelement,{xmlelement,"iq",Attrs,_SubElts}}
   				    StateData#state.username,
   				    Password,
   				    StateData#state.resource),
+	    gen_fsm:reply(StateData#state.from_pid, ok),
   	    {next_state, wait_for_authentication_result, StateData#state{auto_registration=false}};
 %%  TODO: I should check that the packet here is the answer to the login packet.	
 	Other ->
@@ -405,7 +406,7 @@ wait_for_registration_result({xmlstreamelement,{xmlelement, "stream:error", _Att
 wait_for_element({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 				    [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", [Reason]),
-    {next_state, wait_for_element, StateData};
+    {stop, xmpp_error, StateData};
 %% TODO: End of stream should be handle in all state (as well as stream:error)
 wait_for_element({xmlstreamend,"stream:stream"}, StateData) ->
     ?INFO_MSG("Disconnected~n", []),

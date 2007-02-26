@@ -1,7 +1,7 @@
 
 APPNAME=eunit
 
-SUB_DIRECTORIES = src
+SUB_DIRECTORIES = src doc
 
 include vsn.mk
 VSN = $(JABBERLANG_VSN)

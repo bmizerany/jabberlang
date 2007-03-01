@@ -33,7 +33,7 @@ start(Resource) ->
     gen_xmpp_client:start_link(?MODULE, [{resource,Resource}], []).
 
 initialize_counter_pong(XMPP, Counter) ->
-    xmpp:message(XMPP, "mremond@localhost/pong", "chat", "", encode(Counter)).
+    xmpp:message(XMPP, "chris@localhost/pong", "chat", "", encode(Counter)).
 
 %% gen_xmpp_client callbacks
 init(_Args, State) ->

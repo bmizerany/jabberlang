@@ -37,19 +37,17 @@
 %% FSM exports
 -export([start_link/3]).
 -export([init/1,
-	 handle_event/3,
-         handle_sync_event/4,
-         code_change/4,
-         handle_info/3,
-	 handle_event/3,
-	 handle_sync_event/4,
-         terminate/3]).
+    code_change/4,
+    handle_info/3,
+    handle_event/3,
+    handle_sync_event/4,
+    terminate/3]).
 
 %% Internal exports
 -export([receiver/2]).
 
 -include("xmpp.hrl").
-
+-include("exmpp.hrl").
 
 %% API
 start() ->
@@ -131,6 +129,7 @@ iq(Pid, Type, To, Query) ->
 		       io_lib:format("<iq id='~s' to='~s' type='~s'>~s</iq>", [Ref,To,Type,Query])
 	       end,
     Pid ! {iq, Ref, self(), lists:flatten(IQStanza)},
+    %% Pid ! {iq, Ref, self(), exmpp_xml:iq_to_string(IQStanza)},  EXMPP ?
     receive
 	{iqresult, Ref, Result} ->
 	    Result
@@ -238,7 +237,8 @@ handle_info({stop}, _StateName, StateData) ->
     gen_tcp:close(StateData#state.socket),
 
     %% Necessary to close the xml_stream parser:
-    xml_stream:close(StateData#state.xml_stream),
+    %xml_stream:close(StateData#state.xml_stream),
+    exmpp_xmlstream:stop(StateData#state.xml_stream), % EXMPP
 
     {stop, normal, StateData};
 %% IQ: Store the tuple {IQIDRef, CallerPid} in the StateData
@@ -280,8 +280,9 @@ ready_to_connect({connect}, From, StateData) ->
 
     %% Start receiver
     %% On the fly parsing library
-    ok = erl_ddll:load_driver(ejabberd:get_so_path(), expat_erl),
-    Stream = xml_stream:new(self()),
+    %ok = erl_ddll:load_driver(ejabberd:get_so_path(), expat_erl),
+    %Stream = xml_stream:new(self()),
+    {ok, Stream} = exmpp_xmlstream:start({gen_fsm, self()}), % EXMPP
     _ReceiverPid = spawn(?MODULE, receiver, [Socket, Stream]),
 
     {next_state, wait_for_stream, StateData#state{socket = Socket, xml_stream = Stream, from_pid=From}}.
@@ -549,7 +550,7 @@ process_iq_result(IQRefList, Ref, Stanza) ->
 get_subelts_cdata(Tagname, SubElts) ->
     case lists:keysearch(Tagname, 2, SubElts) of
 	false -> "";
-	{value, Tag} -> xml:get_tag_cdata(Tag)
+	{value, Tag} -> xml:get_tag_cdata(Tag) % EXMPP ?
     end.
 
 %% Get tag attribute value, given a list of elements as input.
@@ -557,7 +558,7 @@ get_subelts_cdata(Tagname, SubElts) ->
 get_subelts_attr(Tagname, AttrName, SubElts) ->
     case lists:keysearch(Tagname, 2, SubElts) of
 	false -> "";
-	{value, Tag} -> xml:get_tag_attr_s(AttrName, Tag)
+	{value, Tag} -> xml:get_tag_attr_s(AttrName, Tag) % EXMPP ?
     end.
 
 %% Wrapper pour les requêtes iq synchrone vers un équivalent de call
@@ -577,8 +578,9 @@ receiver(Socket, Stream) ->
 	{ok, Data} -> 
             %% it's not necessary to convert binary to list
             %% as the xml_stream seems to be able to accept both
-	    Stream1 = xml_stream:parse(Stream, Data),
-	    receiver(Socket, Stream1);
+	    %Stream1 = xml_stream:parse(Stream, Data),
+        {ok, NewStream} = exmpp_xmlstream:parse(Stream, Data), % EXMPP
+	    receiver(Socket, NewStream);
 	{error, _Reason} -> 
 	    ok %% End receiver TODO: End other process
     end.

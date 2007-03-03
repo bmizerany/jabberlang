@@ -1,7 +1,7 @@
 %%% File    : xmpp.erl
-%%% Author  : Mickael Remond <mremond@erlang-fr.org>
+%%% Author  : Mickael Remond <mremond@process-one.net>
 %%% Description : Main XMPP library client features
-%%% Created : 14 Jul 2004 by Mickael Remond <mremond@erlang-fr.org>
+%%% Created : 14 Jul 2004 by Mickael Remond <mremond@process-one.net>
 -module(xmpp).
 -behaviour(gen_fsm).
 
@@ -32,16 +32,16 @@
 	 wait_for_authentication_result/2,
 	 wait_for_registration_result/2,
 	 wait_for_element/2
-	 ]).
+	]).
 
 %% FSM exports
 -export([start_link/3]).
 -export([init/1,
-    code_change/4,
-    handle_info/3,
-    handle_event/3,
-    handle_sync_event/4,
-    terminate/3]).
+	 code_change/4,
+	 handle_info/3,
+	 handle_event/3,
+	 handle_sync_event/4,
+	 terminate/3]).
 
 %% Internal exports
 -export([receiver/2]).
@@ -288,7 +288,7 @@ ready_to_connect({connect}, From, StateData) ->
     {next_state, wait_for_stream, StateData#state{socket = Socket, xml_stream = Stream, from_pid=From}}.
 
 
-wait_for_stream({xmlstreamstart,"stream:stream", _Attributes}, StateData) ->
+wait_for_stream({xmlstreamstart,#xmlelement{name="stream:stream"}}, StateData) ->
     %% The stream is now open
     %% Retrieve supported authentication methods:
     get_authentication_methods(StateData#state.socket, StateData#state.username),
@@ -333,7 +333,7 @@ wait_for_authentication_method({xmlstreamelement, {xmlelement, "iq", _Attrs, Elt
 				    Password,
 				    StateData#state.resource),
 	    {next_state, wait_for_authentication_result, StateData}
-	end;
+    end;
 %% Error: Disconnected
 wait_for_authentication_method({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 						  [{xmlcdata,"Disconnected"}]}}, StateData) ->

@@ -299,11 +299,13 @@ wait_for_stream(#xmlstreamstart{element=#xmlnselement{
     %% Retrieve supported authentication methods:
     get_authentication_methods(StateData#state.socket, StateData#state.username),
     {next_state, wait_for_authentication_method, StateData};
-%% cannot receive open stream due to an XMPP error:
-wait_for_stream({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
-				   [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
+wait_for_stream(#xmlstreamelement
+			       {element=#xmlnselement{
+				  ns='http://etherx.jabber.org/streams',
+				  name=error}=StreamError}, StateData) ->
+    Reason = stream_error(StreamError),
     ?ERROR_MSG("Stream error: ~p~n", [Reason]),
-    {stop, xmpp_error_opening_stream, StateData}.
+    {stop, {error, Reason}, StateData}.
 
 % Receiving elements of the form:
 %
@@ -321,7 +323,9 @@ wait_for_stream({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 %                                          {xmlelement,"digest",[],[]},
 %                                          {xmlelement,"resource",[],[]}]}]}}
 %
-wait_for_authentication_method({xmlstreamelement, {xmlelement, "iq", _Attrs, Elts}}, StateData) ->
+wait_for_authentication_method(#xmlstreamelement{element=#xmlnselement{
+						   name=iq, children=Elts}},
+			       StateData) ->
     %% Extracting 
     [{xmlelement, "query", [{"xmlns","jabber:iq:auth"}],SubElts}] = Elts,
 
@@ -345,12 +349,14 @@ wait_for_authentication_method({xmlstreamelement,{xmlelement, "stream:error", _A
 						  [{xmlcdata,"Disconnected"}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", ["Disconnected"]),
     {stop, xmpp_error, StateData};
+%% cannot receive open stream due to an XMPP error:
 %% General error case:
-wait_for_authentication_method({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
-						  [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
-    ?ERROR_MSG("Stream error: ~p~n", [Reason]),
-    {stop, xmpp_error, StateData}.
-
+wait_for_authentication_method(#xmlstreamelement
+			       {element=#xmlnselement{
+				  ns='http://etherx.jabber.org/streams',
+				  name=error}=StreamError}, StateData) ->
+    Reason = stream_error(StreamError),
+    {stop, {error, Reason}, StateData}.
 
 %% Authentication successfull
 wait_for_authentication_result({xmlstreamelement,{xmlelement,"iq",[{"type","result"}],[]}}, StateData) ->
@@ -625,6 +631,14 @@ handle_sync_event(Event, _From, StateName, StateData) ->
     {reply, Reply, StateName, StateData}.
 
 
+%% Extract and return error code from XMPP stream:error:
+stream_error(StreamError) ->
+    case exmpp_xml:get_element_by_ns(StreamError,
+				     'urn:ietf:params:xml:ns:xmpp-streams') of
+	false -> undefined;
+	#xmlnselement{name=Name} -> Name;
+	_Other -> undefined
+    end.
 
 %% Récupération de statistiques
 % OUT(1,mremond@localhost/tkabber):

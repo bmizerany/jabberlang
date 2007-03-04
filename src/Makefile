@@ -6,7 +6,7 @@ EBIN=../ebin
 INCLUDE=../include
 
 ERL_COMPILE_FLAGS += -I$(INCLUDE) +warn_unused_vars +nowarn_shadow_vars +warn_unused_import
-ERL_COMPILE_FLAGS += -I../../exmpp-0.7.0/include
+ERL_COMPILE_FLAGS += -I../../exmpp/include
 
 SOURCES= \
 	gen_xmpp_client.erl \

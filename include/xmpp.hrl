@@ -1,13 +1,14 @@
 %%% File    : xmpp.hrl
-%%% Author  : Mickael Remond <mickael.remond@erlang-fr.org>
+%%% Author  : Mickael Remond <mremond@process-one.net>
 %%% Description : 
-%%% Created : 17 Oct 2004 by Mickael Remond <mickael.remond@erlang-fr.org>
+%%% Created : 17 Oct 2004 by Mickael Remond <mremond@process-one.net>
+%%% This code is copyright Process-one (http://www.process-one.net/)
 
 -define(STREAM_CLIENT_HEADER,
-        "<?xml version='1.0'?>"
-        "<stream:stream to='~s' "
+	"<?xml version='1.0'?>"
+	"<stream:stream to='~s' "
 	"xmlns='jabber:client' "
-        "xmlns:stream='http://etherx.jabber.org/streams'>").
+	"xmlns:stream='http://etherx.jabber.org/streams'>").
 
 -define(STREAM_TRAILER, "</stream:stream>").
 
@@ -30,7 +31,7 @@
 -record(state, {socket,
 		xml_stream, 
 		from_pid, %% This is used in gen_fsm sync calls
-		iq_ref_list = [], %% This is used to store tuples of the from {IQIdRef, CallerPid} to synchronously wait for IQ results
+		iq_ref_list = [], %% This is used to store tuples of the from {I◊QIdRef, CallerPid} to synchronously wait for IQ results
 		callback_module = xmpp_callbacks, %% Default callback module
 		username,
 		authentication, %% can be {password, Password} or {digest, Digest}

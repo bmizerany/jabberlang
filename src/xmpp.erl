@@ -299,43 +299,32 @@ wait_for_stream(#xmlstreamstart{element=#xmlnselement{
     %% Retrieve supported authentication methods:
     get_authentication_methods(StateData#state.socket, StateData#state.username),
     {next_state, wait_for_authentication_method, StateData};
+%% Normally a stream error cannot happen here.
+%% The server should first return an opening stream element before sending
+%% the error.
 wait_for_stream(#xmlstreamelement
 			       {element=#xmlnselement{
 				  ns='http://etherx.jabber.org/streams',
 				  name=error}=StreamError}, StateData) ->
     Reason = stream_error(StreamError),
-    ?ERROR_MSG("Stream error: ~p~n", [Reason]),
     {stop, {error, Reason}, StateData}.
 
-% Receiving elements of the form:
-%
-% {xmlstreamelement,{xmlelement,
-%                                    "iq",
-%                                    [{"type","result"}],
-%                                    [{xmlelement,
-%                                         "query",
-%                                         [{"xmlns","jabber:iq:auth"}],
-%                                         [{xmlelement,
-%                                              "username",
-%                                              [],
-%                                              [{xmlcdata,"mremond"}]},
-%                                          {xmlelement,"password",[],[]},
-%                                          {xmlelement,"digest",[],[]},
-%                                          {xmlelement,"resource",[],[]}]}]}}
-%
-wait_for_authentication_method(#xmlstreamelement{element=#xmlnselement{
-						   name=iq, children=Elts}},
+%% Get authentication methods to choose one
+wait_for_authentication_method(#xmlstreamelement
+			       {element=#xmlnselement{name=iq}=IQElement},
 			       StateData) ->
-    %% Extracting 
-    [{xmlelement, "query", [{"xmlns","jabber:iq:auth"}],SubElts}] = Elts,
-
+    %% Extracting the auth methods:
+    QueryElement = exmpp_xml:get_element_by_name(IQElement, 'jabber:iq:auth', 'query'),
+    
     %% Use password authentication first
     %% TODO: support digest and resource
-    case lists:keysearch("password", 2, SubElts) of
-	false -> ?ERROR_MSG("Jabberlang library only support password authentication for now. "
-			    "Password authentication is not accepted by the server~n", []),
-		 {stop, authentication_method_not_supported, StateData};
-	{value, {xmlelement, "password", _, _}} ->
+    case exmpp_xml:get_element_by_name(QueryElement, 'jabber:iq:auth', 'password') of
+	false -> 
+	    %% Jabberlang library only support password authentication for now.
+	    %% If Password authentication is not accepted by the server
+	    %% we stop there:
+	    {stop, {error, authentication_method_not_supported}, StateData};
+	_ ->
 	    %% Authentication
 	    {password, Password} = StateData#state.authentication,
 	    password_authentication(StateData#state.socket,
@@ -345,12 +334,14 @@ wait_for_authentication_method(#xmlstreamelement{element=#xmlnselement{
 	    {next_state, wait_for_authentication_result, StateData}
     end;
 %% Error: Disconnected
-wait_for_authentication_method({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
-						  [{xmlcdata,"Disconnected"}]}}, StateData) ->
-    ?ERROR_MSG("Stream error: ~p~n", ["Disconnected"]),
-    {stop, xmpp_error, StateData};
-%% cannot receive open stream due to an XMPP error:
-%% General error case:
+wait_for_authentication_method(#xmlstreamelement
+			       {element=#xmlnselement{
+				  ns='http://etherx.jabber.org/streams',
+				  name=error,
+				  children=[#xmlcdata{cdata=  <<"Disconnected">> }]}},
+			       StateData) ->
+    {stop, {error, disconnected}, StateData};
+%% Error in the stream
 wait_for_authentication_method(#xmlstreamelement
 			       {element=#xmlnselement{
 				  ns='http://etherx.jabber.org/streams',
@@ -359,7 +350,12 @@ wait_for_authentication_method(#xmlstreamelement
     {stop, {error, Reason}, StateData}.
 
 %% Authentication successfull
-wait_for_authentication_result({xmlstreamelement,{xmlelement,"iq",[{"type","result"}],[]}}, StateData) ->
+wait_for_authentication_result(#xmlstreamelement
+			       {element=
+				#xmlnselement{name=iq,
+					      attrs=[#xmlattr{name=type,
+							      value="result"}]}},
+			       StateData) ->
     ?INFO_MSG("Authentication successfull. You are logged in as ~p ~n", [StateData#state.username]),
     %% After authentication, send presence information (TODO: Move that after roster retrieval)
     send_presence(StateData#state.socket, StateData#state.show, StateData#state.status),
@@ -369,17 +365,24 @@ wait_for_authentication_result({xmlstreamelement,{xmlelement,"iq",[{"type","resu
 wait_for_authentication_result({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 						  [{xmlcdata,"Disconnected"}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", ["Disconnected"]),
-    {stop, xmpp_error, StateData};
+    {stop, {error, disconnected}, StateData};
 %% If unauthorized: Try to register user...
-%%  TODO: I should check that the packet here is the answer to the login packet.
-wait_for_authentication_result(Other, StateData) ->
+%% Stanza error
+wait_for_authentication_result(#xmlstreamelement
+			       {element=
+				#xmlnselement{name=iq,
+					      attrs=[#xmlattr{name=type,
+							      value="error"}]}=IQElement},
+			       StateData) ->
+    %% Extract stanza error codes:
+    {Code, Type, Reason} = stanza_error(IQElement),
     case StateData#state.auto_registration of
 	false ->
-	    ?ERROR_MSG("Authentication failed (~p)", [Other]),
+	    ?ERROR_MSG("Authentication failed (~p)", [{Code, Type, Reason}]),
 	    gen_fsm:reply(StateData#state.from_pid, {error, authentication_failed}),
-	    {stop, authentication_failed, StateData#state{from_pid=undefined}};
+	    {stop, {error,authentication_failed}, StateData#state{from_pid=undefined}};
 	true ->
-	    ?INFO_MSG("Authentication failed (~p)", [Other]),
+	    ?INFO_MSG("Authentication failed (~p)", [{Code, Type, Reason}]),
 	    ?INFO_MSG("Trying to register user ~s", [StateData#state.username]),
 	    register(StateData#state.socket, StateData#state.username,
 			  StateData#state.authentication, StateData#state.resource),
@@ -403,23 +406,23 @@ wait_for_registration_result({xmlstreamelement,{xmlelement,"iq",Attrs,_SubElts}}
 	Other ->
 	    ?ERROR_MSG("Authentication and registration failed for user ~s (~p)", [StateData#state.username, Other]),
 	    gen_fsm:reply(StateData#state.from_pid, {error, registration_failed}),
-	    {stop, registration_failed, StateData#state{from_pid=undefined}}
+	    {stop, {error,registration_failed}, StateData#state{from_pid=undefined}}
     end;
 %% Error: Disconnected
 wait_for_registration_result({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 						  [{xmlcdata,"Disconnected"}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", ["Disconnected"]),
-    {stop, xmpp_error, StateData};
+    {stop, {error, disconnected}, StateData};
 %% Error: General case:
 wait_for_registration_result({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 						  [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", [Reason]),
-    {stop, xmpp_error, StateData}.
+    {stop, {error, Reason}, StateData}.
 
 wait_for_element({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
 				    [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
     ?ERROR_MSG("Stream error: ~p~n", [Reason]),
-    {stop, xmpp_error, StateData};
+    {stop, {error,Reason}, StateData};
 %% TODO: End of stream should be handle in all state (as well as stream:error)
 wait_for_element({xmlstreamend,"stream:stream"}, StateData) ->
     ?INFO_MSG("Disconnected~n", []),
@@ -639,6 +642,15 @@ stream_error(StreamError) ->
 	#xmlnselement{name=Name} -> Name;
 	_Other -> undefined
     end.
+
+%% Extract error information from XMPP stanza error:
+stanza_error(IQError) ->
+    ErrorElement = exmpp_xml:get_element_by_name(IQError, 'jabber:client', error),
+    Code = exmpp_xml:get_attribute_node(ErrorElement, code),
+    Type = exmpp_xml:get_attribute_node(ErrorElement, type),
+    ReasonElement = exmpp_xml:get_element_by_ns(ErrorElement,
+						'urn:ietf:params:xml:ns:xmpp-stanzas'),
+    {Code#xmlattr.value, Type#xmlattr.value, ReasonElement#xmlnselement.name}.
 
 %% Récupération de statistiques
 % OUT(1,mremond@localhost/tkabber):

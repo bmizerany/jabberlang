@@ -288,7 +288,6 @@ ready_to_connect({connect}, From, StateData) ->
     open_client_stream(Socket, Domain),
 
     {ok, Stream} = exmpp_xmlstream:start({gen_fsm, self()}, ?PARSER_OPTIONS),
-    ?INFO_MSG("MREMOND: streamstart ~n",[]),
     _ReceiverPid = spawn(?MODULE, receiver, [Socket, Stream]),
 
     {next_state, wait_for_stream, StateData#state{socket = Socket, xml_stream = Stream, from_pid=From}}.
@@ -581,17 +580,12 @@ get_subelts_attr(Tagname, AttrName, SubElts) ->
 %% en attente, (mais assez long).
 
 receiver(Socket, Stream) ->
-    ?INFO_MSG("MREMOND receiver ~n",[]),
     case gen_tcp:recv(Socket, 0) of
 	{ok, Data} ->
-	    ?INFO_MSG("MREMOND data ~p~n",[Data]),
 	    {ok, NewStream} = exmpp_xmlstream:parse(Stream, Data),
-	    ?INFO_MSG("MREMOND newstream ~p~n",[NewStream]),
 	    receiver(Socket, NewStream);
 	{error, _Reason} -> 
-	    ok; %% End receiver TODO: End other process
-	Other ->
-	    ?INFO_MSG("MREMOND Other=~p~n",[Other])
+	    ok %% End receiver TODO: End other process
     end.
 
 

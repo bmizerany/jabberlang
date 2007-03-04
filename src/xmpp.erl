@@ -49,6 +49,15 @@
 -include("xmpp.hrl").
 -include("exmpp.hrl").
 
+%% No compatibility mode: We use all the nice optimisation of exmpp:
+-define(PARSER_OPTIONS,
+	[namespace,
+	 name_as_atom,
+	 ns_check,                        
+	 names_check,                                                          
+	 attrs_check,                                                          
+	 no_maxsize]).
+
 %% API
 start() ->
     start_link(?defaultserver, ?defaultport, ?defaultserver).
@@ -265,9 +274,9 @@ ready_to_connect({connect}, From, StateData) ->
     Port = StateData#state.port,
     Domain = StateData#state.domain,
     Socket = case gen_tcp:connect(Host, Port, [{packet,0},
-						 binary,
-						 {active, false},
-						 {reuseaddr, true}], infinity) of
+					       binary,
+					       {active, false},
+					       {reuseaddr, true}], infinity) of
 		 {ok, Sock}      -> 
 		     ?INFO_MSG("Connected to ~s:~p~n", [Host,Port]),
 		     Sock;
@@ -278,17 +287,15 @@ ready_to_connect({connect}, From, StateData) ->
 
     open_client_stream(Socket, Domain),
 
-    %% Start receiver
-    %% On the fly parsing library
-    %ok = erl_ddll:load_driver(ejabberd:get_so_path(), expat_erl),
-    %Stream = xml_stream:new(self()),
-    {ok, Stream} = exmpp_xmlstream:start({gen_fsm, self()}), % EXMPP
+    {ok, Stream} = exmpp_xmlstream:start({gen_fsm, self()}, ?PARSER_OPTIONS),
+    ?INFO_MSG("MREMOND: streamstart ~n",[]),
     _ReceiverPid = spawn(?MODULE, receiver, [Socket, Stream]),
 
     {next_state, wait_for_stream, StateData#state{socket = Socket, xml_stream = Stream, from_pid=From}}.
 
-
-wait_for_stream({xmlstreamstart,#xmlelement{name="stream:stream"}}, StateData) ->
+wait_for_stream(#xmlstreamstart{element=#xmlnselement{
+				  ns='http://etherx.jabber.org/streams',
+				  name=stream}}, StateData) ->
     %% The stream is now open
     %% Retrieve supported authentication methods:
     get_authentication_methods(StateData#state.socket, StateData#state.username),
@@ -574,15 +581,17 @@ get_subelts_attr(Tagname, AttrName, SubElts) ->
 %% en attente, (mais assez long).
 
 receiver(Socket, Stream) ->
+    ?INFO_MSG("MREMOND receiver ~n",[]),
     case gen_tcp:recv(Socket, 0) of
-	{ok, Data} -> 
-            %% it's not necessary to convert binary to list
-            %% as the xml_stream seems to be able to accept both
-	    %Stream1 = xml_stream:parse(Stream, Data),
-        {ok, NewStream} = exmpp_xmlstream:parse(Stream, Data), % EXMPP
+	{ok, Data} ->
+	    ?INFO_MSG("MREMOND data ~p~n",[Data]),
+	    {ok, NewStream} = exmpp_xmlstream:parse(Stream, Data),
+	    ?INFO_MSG("MREMOND newstream ~p~n",[NewStream]),
 	    receiver(Socket, NewStream);
 	{error, _Reason} -> 
-	    ok %% End receiver TODO: End other process
+	    ok; %% End receiver TODO: End other process
+	Other ->
+	    ?INFO_MSG("MREMOND Other=~p~n",[Other])
     end.
 
 

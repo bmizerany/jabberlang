@@ -362,9 +362,12 @@ wait_for_authentication_result(#xmlstreamelement
     gen_fsm:reply(StateData#state.from_pid, ok),
     {next_state, wait_for_element, StateData#state{from_pid=undefined}};
 %% Error: Disconnected
-wait_for_authentication_result({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
-						  [{xmlcdata,"Disconnected"}]}}, StateData) ->
-    ?ERROR_MSG("Stream error: ~p~n", ["Disconnected"]),
+wait_for_authentication_result(#xmlstreamelement
+			       {element=#xmlnselement{
+				  ns='http://etherx.jabber.org/streams',
+				  name=error,
+				  children=[#xmlcdata{cdata=  <<"Disconnected">> }]}},
+			       StateData) ->
     {stop, {error, disconnected}, StateData};
 %% If unauthorized: Try to register user...
 %% Stanza error
@@ -389,10 +392,17 @@ wait_for_authentication_result(#xmlstreamelement
 	    {next_state, wait_for_registration_result, StateData}
     end.
 
-wait_for_registration_result({xmlstreamelement,{xmlelement,"iq",Attrs,_SubElts}}, StateData) ->
-    case lists:keysearch("type", 1, Attrs) of
+%% MREMOND: TODO
+%% Remove auto registation from the FSM.
+%% It should be move to the API and explicitely called by the developer.
+wait_for_registration_result(#xmlstreamelement
+			       {element=#xmlnselement{name=iq,
+						      attrs=Attrs}},
+			     StateData) ->
+    %% Registration failed
+    case exmpp_xml:get_attribute_node_from_list(Attrs, type) of
 	%% Registration successfull:
-	{value, {"type", "result"}} ->
+	#xmlattr{value="result"} ->
 	    ?INFO_MSG("Successfully registered user ~s", [StateData#state.username]),
 	    %% After registration, we need to redo authentication
   	    {password, Password} = StateData#state.authentication,
@@ -402,96 +412,106 @@ wait_for_registration_result({xmlstreamelement,{xmlelement,"iq",Attrs,_SubElts}}
   				    StateData#state.resource),
 	    gen_fsm:reply(StateData#state.from_pid, ok),
   	    {next_state, wait_for_authentication_result, StateData#state{auto_registration=false}};
-%%  TODO: I should check that the packet here is the answer to the login packet.	
-	Other ->
-	    ?ERROR_MSG("Authentication and registration failed for user ~s (~p)", [StateData#state.username, Other]),
+	_ ->
+	    ?ERROR_MSG("Authentication and registration failed for user ~s", [StateData#state.username]),
 	    gen_fsm:reply(StateData#state.from_pid, {error, registration_failed}),
 	    {stop, {error,registration_failed}, StateData#state{from_pid=undefined}}
     end;
 %% Error: Disconnected
-wait_for_registration_result({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
-						  [{xmlcdata,"Disconnected"}]}}, StateData) ->
-    ?ERROR_MSG("Stream error: ~p~n", ["Disconnected"]),
+wait_for_registration_result(#xmlstreamelement
+			       {element=#xmlnselement{
+				  ns='http://etherx.jabber.org/streams',
+				  name=error,
+				  children=[#xmlcdata{cdata=  <<"Disconnected">> }]}},
+			       StateData) ->
     {stop, {error, disconnected}, StateData};
-%% Error: General case:
-wait_for_registration_result({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
-						  [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
-    ?ERROR_MSG("Stream error: ~p~n", [Reason]),
+%% Stream Error
+wait_for_registration_result(#xmlstreamelement
+			       {element=#xmlnselement{
+				  ns='http://etherx.jabber.org/streams',
+				  name=error}=StreamError}, StateData) ->
+    Reason = stream_error(StreamError),
     {stop, {error, Reason}, StateData}.
 
-wait_for_element({xmlstreamelement,{xmlelement, "stream:error", _Attrs,
-				    [{xmlelement, Reason, _ErrorAttrs, []}]}}, StateData) ->
-    ?ERROR_MSG("Stream error: ~p~n", [Reason]),
-    {stop, {error,Reason}, StateData};
-%% TODO: End of stream should be handle in all state (as well as stream:error)
-wait_for_element({xmlstreamend,"stream:stream"}, StateData) ->
-    ?INFO_MSG("Disconnected~n", []),
+wait_for_element(#xmlstreamelement
+			       {element=#xmlnselement{
+				  ns='http://etherx.jabber.org/streams',
+				  name=error}=StreamError}, StateData) ->
+    Reason = stream_error(StreamError),
+    {stop, {error, Reason}, StateData};
+%% TODO: Check End Element.
+wait_for_element(#xmlstreamend{}, StateData) ->
     {stop, normal, StateData};
-%% Message packet:
-wait_for_element({xmlstreamelement,{xmlelement,"message",Attrs,Elts}}, StateData) ->
-    case lists:keysearch("type", 1, Attrs) of
+%% Process Message packet:
+wait_for_element(#xmlstreamelement
+		 {element=#xmlnselement{name=message, attrs=Attrs}=Msg},
+		 StateData) ->
+    %% Set default type
+    case exmpp_xml:get_attribute_node_from_list(Attrs, type) of
 	false ->
 	    process_message(
 	      self(),
 	      StateData#state.socket,
 	      StateData#state.callback_module,
-	      "normal", Attrs, Elts);
-	{value, {"type", Type}} ->
+	      "normal", Attrs, Msg);
+	#xmlattr{value=Type} ->
 	    process_message(
 	      self(),
 	      StateData#state.socket,
 	      StateData#state.callback_module,
-	      Type, Attrs, Elts)
+	      Type, Attrs, Msg)
     end,
     {next_state, wait_for_element, StateData};
 %% presence packet:
-wait_for_element({xmlstreamelement,{xmlelement,"presence",Attrs,Elts}}, StateData) ->
-    case lists:keysearch("type", 1, Attrs) of
+wait_for_element(#xmlstreamelement
+		 {element=#xmlnselement{name=presence, attrs=Attrs}=Pres}, StateData) ->
+    case exmpp_xml:get_attribute_node_from_list(Attrs, type) of
 	false -> process_presence(
 		   self(),
 		   StateData#state.socket,
 		   StateData#state.callback_module,
-		   "available", Attrs, Elts);
-	{value, {"type", Type}} ->
+		   "available", Attrs, Pres);
+	#xmlattr{value=Type} ->
 	    process_presence(
 	      self(),
 	      StateData#state.socket,
 	      StateData#state.callback_module,
-	      Type, Attrs, Elts)
+	      Type, Attrs, Pres)
     end,
     {next_state, wait_for_element, StateData};
 %% Process IQ element: If this is a result: send the data back to the
 %% waiting process. Otherwise use callback to pass it to the standard callback module.
-wait_for_element(XML = {xmlstreamelement,{xmlelement,"iq",Attrs,Elts}}, StateData) ->
+wait_for_element(#xmlstreamelement
+		 {element=#xmlnselement{name=message, attrs=Attrs}=IQ}, StateData) ->
     %%If this is a result: send the data back to the waiting process
     NewStateData = 
-	case lists:keysearch("type", 1, Attrs) of
-	    {value, {"type", "result"}} ->
-		case lists:keysearch("id", 1, Attrs) of
-		    {value, {"id", Ref}} ->
+	case exmpp_xml:get_attribute_node_from_list(Attrs, type) of
+	    #xmlattr{value="result"} ->
+		case exmpp_xml:get_attribute_node_from_list(Attrs, id) of
+		    false -> ?ERROR_MSG("IQ result without id attribute: ~p~n", [IQ]),
+			 StateData;
+		    #xmlattr{value=Ref} ->
 			NewIQRefList = process_iq_result(StateData#state.iq_ref_list,
 							 Ref,
-							 XML),
-			StateData#state{iq_ref_list=NewIQRefList};
-		    _ -> ?ERROR_MSG("IQ result without id attribute: ~p~n", [XML]),
-			 StateData
+							 IQ),
+			StateData#state{iq_ref_list=NewIQRefList}
 		end;
-	    {value, {"type", "error"}} ->
-		case lists:keysearch("id", 1, Attrs) of
-		    {value, {"id", Ref}} ->
+	    #xmlattr{value="error"} ->
+		case exmpp_xml:get_attribute_node_from_list(Attrs, id) of
+		    false -> ?ERROR_MSG("IQ error without id attribute: ~p~n", [IQ]),
+			 StateData;
+		    #xmlattr{value=Ref} ->
 			NewIQRefList = process_iq_result(StateData#state.iq_ref_list,
 							 Ref,
-							 XML),
-			StateData#state{iq_ref_list=NewIQRefList};
-		    _ -> ?ERROR_MSG("IQ error without id attribute: ~p~n", [XML]),
-			 StateData
+							 IQ),
+			StateData#state{iq_ref_list=NewIQRefList}
 		end;
-	    {value, {"type", Type}} ->
+	    #xmlattr{value=Type} ->
 		process_iq(
 		  self(),
 		  StateData#state.socket,
 		  StateData#state.callback_module,
-		  Type, Attrs, Elts,
+		  Type, Attrs, IQ,
 		  StateData),
 		StateData
 	end,
@@ -510,40 +530,48 @@ wait_for_element(XML, StateData) ->
 %% 		     [{xmlcdata,
 %% 		       "I would like to add you to my roster."},
 %% 		      {xmlcdata,"\n"}]}]}}
-process_presence(_Pid, Socket, _Module, "subscribe", Attrs, _Elts) ->
-    {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
+%% TODO: We should make that easy to handle with the API (and we should propose a
+%%   new client template, that setup this default behaviour)
+process_presence(_Pid, Socket, _Module, "subscribe", Attrs, _Pres) ->
+    #xmlattr{value=Who} = exmpp_xml:get_attribute_node_from_list(Attrs, from),
     PresenceTag = "<presence type='~s' to='~s'/>",
     Allowsubscribtion = io_lib:format(PresenceTag,["subscribed", Who]),
     gen_tcp:send(Socket, Allowsubscribtion),
+    %% Todo avoid infinite loop
     Subscribe = io_lib:format(PresenceTag,["subscribe", Who]),
     gen_tcp:send(Socket, Subscribe);
-process_presence(_Pid, _Socket, _Module, "subscribed", Attrs, _Elts) ->
-    {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
+process_presence(_Pid, _Socket, _Module, "subscribed", Attrs, _Pres) ->
+    #xmlattr{value=Who} = exmpp_xml:get_attribute_node_from_list(Attrs, from),    
     ?INFO_MSG("Now subscribed to ~s", [Who]);
 %% Generic presence: use callbacks
 %% TODO: For available presence: Extract show, status (and priority ?)
-process_presence(Pid, _Socket, Module, Type, Attrs, Elts) ->
-    {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
-    Module:presence(Pid, Type, Who, Attrs, Elts).
+process_presence(Pid, _Socket, Module, Type, Attrs, Pres) -> 
+    #xmlattr{value=Who} = exmpp_xml:get_attribute_node_from_list(Attrs, from),    
+    Module:presence(Pid, Type, Who, Attrs, Pres).
 
 %% The client has received a message
 %% Use callback module to "send" it to the client
-process_message(Pid, _Socket, Module, Type, Attrs, SubElts) ->
-    {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
-    Body = get_subelts_cdata("body", SubElts),
-    Subject = get_subelts_cdata("subject", SubElts),
-    Module:message(Pid, Type, Who, Subject, Body, Attrs, SubElts).
+process_message(Pid, _Socket, Module, Type, Attrs, Msg) ->
+    #xmlattr{value=Who} = exmpp_xml:get_attribute_node_from_list(Attrs, from),
+    Body = exmpp_xml:get_cdata(exmpp_xml:get_element_by_name(Msg, body)),
+    Subject = exmpp_xml:get_cdata(exmpp_xml:get_element_by_name(Msg, subject)),
+    Module:message(Pid, Type, Who, Subject, Body, Attrs, Msg).
 
 %% The client has received an iq query
-process_iq(Pid, _Socket, Module, Type, Attrs, SubElts, StateData) ->
-    case lists:keysearch("id", 1, Attrs) of
-	{value, {"id", Ref}} ->
-	    {value, {"from", Who}} = lists:keysearch("from", 1, Attrs),
+process_iq(Pid, _Socket, Module, Type, Attrs, IQ, StateData) ->
+    case exmpp_xml:get_attribute_node_from_list(Attrs, id) of
+	false ->
+	    ?ERROR_MSG("IQ query without id. Ignoring [~p - ~p]", [Attrs, IQ]);
+	#xmlattr{value=Ref} ->
+	    #xmlattr{value=Who} = exmpp_xml:get_attribute_node_from_list(Attrs, from),
 	    %% Extract query namespace
-	    QueryNS = get_subelts_attr("query", "xmlns", SubElts),
-	    automatic_iq(Pid, Module, Type, Who, QueryNS, Ref, Attrs, SubElts, StateData);
-	_ ->
-	    ?ERROR_MSG("IQ query without id. Ignoring [~p - ~p]", [Attrs, SubElts])
+	    QueryNS = case exmpp_xml:get_element_by_name(IQ, 'query') of
+			  false -> undefined;
+			  QueryElement -> 
+			      false_to_undefined(exmpp_xml:get_attribute_node(QueryElement,
+									      xmlns))
+		      end,
+	    automatic_iq(Pid, Module, Type, Who, QueryNS, Ref, Attrs, IQ, StateData)
     end.
 
 %% Send the IQ result to the waiting process
@@ -560,21 +588,9 @@ process_iq_result(IQRefList, Ref, Stanza) ->
 	    IQRefList
     end.
 
-%% Get content of a tag, given a list of elements as input.
-%% Warning, this function is not recursive: Only search in a list of element
-get_subelts_cdata(Tagname, SubElts) ->
-    case lists:keysearch(Tagname, 2, SubElts) of
-	false -> "";
-	{value, Tag} -> xml:get_tag_cdata(Tag) % EXMPP ?
-    end.
-
-%% Get tag attribute value, given a list of elements as input.
-%% Warning, this function is not recursive: Only search in a list of element
-get_subelts_attr(Tagname, AttrName, SubElts) ->
-    case lists:keysearch(Tagname, 2, SubElts) of
-	false -> "";
-	{value, Tag} -> xml:get_tag_attr_s(AttrName, Tag) % EXMPP ?
-    end.
+%% Convert false to undefined or return other values unchanged.
+false_to_undefined(false) -> undefined;
+false_to_undefined(Other) -> Other.
 
 %% Wrapper pour les requêtes iq synchrone vers un équivalent de call
 %% en Erlang.  Introduire un mechanisme pour redispatcher la réponse
@@ -612,17 +628,15 @@ automatic_iq(Pid, _Module, _Type, From, "jabber:iq:version", PacketID, _Attrs, _
     xmpp:send(Pid, XMPP_Packet);
 
 %% No automatic IQ reply: Let the callback module handle the answer.
-automatic_iq(Pid, Module, Type, From, QueryNS, PacketID, Attrs, SubElts, _StateData) ->
-    Module:iq(Pid, Type, From, QueryNS, PacketID, Attrs, SubElts).
+automatic_iq(Pid, Module, Type, From, QueryNS, PacketID, Attrs, IQ, _StateData) ->
+    Module:iq(Pid, Type, From, QueryNS, PacketID, Attrs, IQ).
 
 %% OTP related code
-
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
 terminate(_Reason, _StateName, _StateData) ->
     ok.
-
 
 handle_event(Event, StateName, StateData) ->
     io:format("handle_event event: ~p ~n", [Event]),

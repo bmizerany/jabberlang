@@ -444,8 +444,7 @@ wait_for_element(#xmlstreamend{}, StateData) ->
     {stop, normal, StateData};
 %% Process Message packet:
 wait_for_element(#xmlstreamelement
-		 {element=#xmlnselement{name=message, attrs=Attrs}=Msg},
-		 StateData) ->
+        {element=#xmlnselement{name=message, attrs=Attrs}=Msg}, StateData) ->
     %% Set default type
     case exmpp_xml:get_attribute_node_from_list(Attrs, type) of
 	false ->
@@ -482,7 +481,7 @@ wait_for_element(#xmlstreamelement
 %% Process IQ element: If this is a result: send the data back to the
 %% waiting process. Otherwise use callback to pass it to the standard callback module.
 wait_for_element(#xmlstreamelement
-		 {element=#xmlnselement{name=message, attrs=Attrs}=IQ}, StateData) ->
+		 {element=#xmlnselement{name=iq, attrs=Attrs}=IQ}, StateData) ->
     %%If this is a result: send the data back to the waiting process
     NewStateData = 
 	case exmpp_xml:get_attribute_node_from_list(Attrs, type) of

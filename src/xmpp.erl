@@ -289,8 +289,8 @@ ready_to_connect({connect}, From, StateData) ->
 
     Stream = case exmpp_xmlstream:start({gen_fsm, self()}, ?PARSER_OPTIONS) of
     {ok, S} -> S;
-    {error, Reason} -> ?ERROR_MSG("xmlstream error [~p]~n",[Reason]),
-        exit(Reason)
+    {error, XmlReason} -> ?ERROR_MSG("xmlstream error [~p]~n",[XmlReason]),
+        exit(XmlReason)
     end,
     _ReceiverPid = spawn(?MODULE, receiver, [Socket, Stream]),
 
